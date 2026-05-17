@@ -9,13 +9,13 @@ Async BOF for discovering open ports on one or more target systems.
 
 The `asyncscan` BOF involves the following steps:  
 
-1. BOF arguments are parsed into a list of scan targets and ports. IP ranges and CIDR notation are expanded by the Conquest module before being passed to the BOF.
+1. Comma-separated BOF arguments are parsed into a list of scan targets and ports. IP ranges and CIDR notation are expanded by the Conquest module before being passed to the BOF.
 2. A pool of non-blocking TCP sockets is maintained. For each entry, the target is resolved via `getaddrinfo` and a `connect()` is fired immediately without waiting for the result.
 3. `WSAPoll` waits up to a user-specified timeout for any socket in the pool to become ready. `getsockopt(SO_ERROR)` is called on each ready socket to distinguish open from closed ports.
 4. Results are tracked per host. If verbose mode is enabled, open ports are printed immediately and the agent is woken up via `BeaconWakeup` to deliver output without waiting for the next check-in.
 5. A final scan summary is printed after the port scan completes.
 
-The port scan can be canceled using the `cancel` command in Conquest, or by setting the `hStop` event usign any other framework.
+The port scan can be aborted using the `cancel` command in Conquest, or by setting the `hStop` event usign any other framework.
 
 ## Usage
 
@@ -49,7 +49,7 @@ In verbose mode, open ports are printed to the agent console as they are discove
 
 ![Verbose Mode](./assets/asyncscan-verbose.png)
 
-When all targets and ports have been scanned, a final nmap-style summary is printed grouped by host.
+When all targets and ports have been scanned, a final scan summary shows the open ports grouped by target host.
 
 ![Summary](./assets/asyncscan-summary.png)
 
