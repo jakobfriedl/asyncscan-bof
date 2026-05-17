@@ -79,7 +79,8 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
         entries[i].sock = INVALID_SOCKET;
 
     // Notify about the first target before entering the scan loop
-    BeaconPrintf(CALLBACK_OUTPUT, "[*] Scanning %s...\n", settings.targets[0]);
+    if (settings.verbose)
+        BeaconPrintf(CALLBACK_OUTPUT, "[*] Scanning %s...\n", settings.targets[0]);
 
     while (queued < total || active > 0) {
         // Handle stop event
@@ -100,7 +101,7 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
                 // Move to next target when all ports have been scanned on the current one
                 portIndex = 0;
                 targetIndex++;
-                if (targetIndex < settings.numTargets) {
+                if (targetIndex < settings.numTargets && settings.verbose) {
                     BeaconPrintf(CALLBACK_OUTPUT, "[*] Scanning %s...\n", settings.targets[targetIndex]);
                 }
             }
@@ -203,7 +204,7 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
 VOID PrintScanSummary(SCAN_SETTINGS settings, SCAN_RESULT result){    
     for (int h = 0; h < settings.numTargets; h++) {
         HOST_RESULT* host = &result.hosts[h];
-        BeaconPrintf(CALLBACK_OUTPUT, "[*] Scan result for %s (%d open | %d closed):\n", settings.targets[h], host->open, host->closed);
+        BeaconPrintf(CALLBACK_OUTPUT, "[*] Scan result for %s: %d open | %d closed\n", settings.targets[h], host->open, host->closed);
         if (host->open == 0) 
             continue;
         
