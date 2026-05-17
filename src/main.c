@@ -64,10 +64,11 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
     int targetIndex = 0, portIndex = 0;
     int active = 0;
 
-    // Allocate output buffer
-    int bufSize = total * 280 + 1;
-    result.output = (char*)MemAlloc(bufSize);
-    int outputLen = 0;
+    // Allocate per-host result 
+    // Each host gets an open port array with the size of settings.numPorts, as the maximum number of open ports is the number of ports scanned
+    result.hosts = (HOST_RESULT*)MemAlloc(settings.numTargets * sizeof(HOST_RESULT));
+    for (int h = 0; h < settings.numTargets; h++)
+        result.hosts[h].openPorts = (int*)MemAlloc(settings.numPorts * sizeof(int));
 
     SCAN_ENTRY* entries = (SCAN_ENTRY*)MemAlloc(settings.maxConn * sizeof(SCAN_ENTRY));
     WSAPOLLFD* fds = (WSAPOLLFD*)MemAlloc(settings.maxConn * sizeof(WSAPOLLFD));
@@ -89,7 +90,9 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
         for (int s = 0; s < settings.maxConn && queued < total && active < settings.maxConn; s++) {
             if (entries[s].sock != INVALID_SOCKET) continue;
 
-            char* target = settings.targets[targetIndex];
+            // Capture current target index before it advances
+            int curTargetIdx = targetIndex;
+            char* target = settings.targets[curTargetIdx];
             int port = settings.ports[portIndex];
 
             portIndex++;
@@ -132,6 +135,7 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
             entries[s].sock = sock;
             entries[s].target = target;
             entries[s].port = port;
+            entries[s].targetIndex = curTargetIdx;
             active++;
         }
 
@@ -161,20 +165,18 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
                 WS2_32$getsockopt(entries[s].sock, SOL_SOCKET, SO_ERROR, (char*)&err, &errLen);
 
                 if (err == 0) {
-                    // Port open
-                    result.open++;
-                    int written = MSVCRT$_snprintf(result.output + outputLen, bufSize - outputLen, "[+] %s:%d open\n", entries[s].target, entries[s].port);
-                    if (written > 0) outputLen += written;
+                    // Port open 
+                    HOST_RESULT* host = &result.hosts[entries[s].targetIndex];
+                    host->openPorts[host->open++] = entries[s].port;
 
                     // Print open ports as they are found when verbose mode is enabled
                     if (settings.verbose) {
                         BeaconPrintf(CALLBACK_OUTPUT, "[+] %s:%d open\n", entries[s].target, entries[s].port);
-                        BeaconWakeup(); 
+                        BeaconWakeup();
                     }
-
                 } else {
                     // Port closed
-                    result.closed++;
+                    result.hosts[entries[s].targetIndex].closed++;
                 }
             }
 
@@ -198,6 +200,24 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
     return result;
 }
 
+VOID PrintScanSummary(SCAN_SETTINGS settings, SCAN_RESULT result){    
+    for (int h = 0; h < settings.numTargets; h++) {
+        HOST_RESULT* host = &result.hosts[h];
+        BeaconPrintf(CALLBACK_OUTPUT, "[*] Scan result for %s (%d open | %d closed):\n", settings.targets[h], host->open, host->closed);
+        if (host->open == 0) 
+            continue;
+        
+        for (int p = 0; p < host->open; p++){
+            BeaconPrintf(CALLBACK_OUTPUT, "  - %d\n", host->openPorts[p]);
+        }   
+        BeaconPrintf(CALLBACK_OUTPUT, "\n"); 
+    }
+        
+    for (int h = 0; h < settings.numTargets; h++)
+        MemFree(result.hosts[h].openPorts);
+    MemFree(result.hosts);
+}
+
 VOID go(char* args, int argc) {
 
     datap parser;
@@ -217,23 +237,20 @@ VOID go(char* args, int argc) {
     settings.verbose = BeaconDataInt(&parser);
 
     BeaconPrintf(CALLBACK_OUTPUT, "[*] Port scan started:\n");
-    BeaconPrintf(CALLBACK_OUTPUT, "    Target(s):           [%d] %s\n", settings.numTargets, strTargets);
-    BeaconPrintf(CALLBACK_OUTPUT, "    Port(s):             [%d] %s\n", settings.numPorts, strPorts);
-    BeaconPrintf(CALLBACK_OUTPUT, "    Maximum connections: %d\n", settings.maxConn);
-    BeaconPrintf(CALLBACK_OUTPUT, "    Timeout:             %dms\n", settings.timeout);
-    BeaconPrintf(CALLBACK_OUTPUT, "    Verbose:             %s\n\n", settings.verbose == 1 ? "True": "False");
+    BeaconPrintf(CALLBACK_OUTPUT, "  - Targets to scan: %d\n", settings.numTargets);
+    BeaconPrintf(CALLBACK_OUTPUT, "  - Ports to scan:   %d\n", settings.numPorts);
+    BeaconPrintf(CALLBACK_OUTPUT, "  - Max connections: %d\n", settings.maxConn);
+    BeaconPrintf(CALLBACK_OUTPUT, "  - Timeout:         %dms\n", settings.timeout);
+    BeaconPrintf(CALLBACK_OUTPUT, "  - Verbose:         %s\n\n", settings.verbose == 1 ? "true": "false");
     BeaconWakeup(); 
 
     // Start scan
     SCAN_RESULT result = PortScan(settings, hStop);
 
-    // Print scan output
-    BeaconPrintf(CALLBACK_OUTPUT, "[*] Port scan completed.\n");
-    if (result.output && result.output[0])
-        BeaconPrintf(CALLBACK_OUTPUT, "%s", result.output);
-
-    MemFree(result.output);
-
-    BeaconPrintf(CALLBACK_OUTPUT, "\n[+] BOF execution completed.\n");
+    // Print scan results
+    BeaconPrintf(CALLBACK_OUTPUT, "[*] Port scan completed.\n\n");
+    PrintScanSummary(settings, result);
+    
+    BeaconPrintf(CALLBACK_OUTPUT, "[+] BOF execution completed.\n");
     return;
 }

@@ -47,10 +47,15 @@ typedef struct {
     SOCKET sock;
     char* target;
     int port;
+    int targetIndex;
 } SCAN_ENTRY;
 
 typedef struct {
-    char* output;
+    int* openPorts;
     int open;
     int closed;
+} HOST_RESULT;
+
+typedef struct {
+    HOST_RESULT* hosts;
 } SCAN_RESULT;

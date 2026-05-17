@@ -102,7 +102,7 @@ cmd_asyncScan = (
                            message="Tasked agent to scan target systems for open ports.", mitre=["T1046"])
             .addArgString("targets", "Comma-separated list of targets to scan. Use `-` or CIDR notation to specify IP ranges (e.g. 192.168.1.0-128,192.168.1.200,10.0.1.0/24).", True)
             .addArgString("ports", "Comma-separated list of ports to check. Use `-` to specify port ranges (default: nmap top 1000).", False, NMAP_TOP_1000)
-            .addFlagInt("--timeout", "timeout", "Timeout between checks in ms (default: 500).", False, 500)
+            .addFlagInt("--timeout", "timeout", "Maximum time to wait per poll cycle for connections to respond in ms (default: 500).", False, 500)
             .addFlagInt("--max-conn", "max-conn", "Specify how many connections the port scanner handles at a time (default: 1024).", False, 1024)
             .addFlagBool("--verbose", "verbose", "Notify open ports as they are discovered (default: false).")
             .setHandler(lambda agentId, cmdline, args: (
