@@ -1,6 +1,6 @@
 # AsyncScan
 
-Async BOF for discovering open ports on one or more target systems. 
+Async BOF for discovering open ports on one or more target systems. The port scan runs in the background without obstructing the agent's main thread. When `verbose` mode is enabled, open ports are reported as they are found and the `BeaconWakeup` is used to wake-up the agent from sleepmask.
 
 >[!Important]
 > This BOF requires asynchronous object file loading capabilities to work without blocking the agent. Such functionality is provided by the [Conquest](https://github.com/jakobfriedl/conquest/) framework.
