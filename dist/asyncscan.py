@@ -105,7 +105,7 @@ cmd_asyncScan = (
             .addArgString("ports", "Comma-separated list of ports to check. Use `-` to specify port ranges (default: nmap top 1000).", False, NMAP_TOP_1000)
             .addFlagInt("--timeout", "timeout", "Maximum time to wait per poll cycle for connections to respond in ms (default: 500).", False, 500)
             .addFlagInt("--max-conn", "max-conn", "Number of concurrent connections the port scanner maintains at one time (default: 1024).", False, 1024)
-            .addFlagBool("--verbose", "verbose", "Report open ports as they are discovered (default: false).")
+            .addFlagBool("--verbose", "Report open ports as they are discovered (default: false).")
             .setHandler(lambda agentId, cmdline, args: (
                 targets := conquest.get_string(args, 0),
                 ports := conquest.get_string(args, 1),
