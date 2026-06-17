@@ -251,7 +251,7 @@ VOID go(char* args, int argc) {
     // Print scan results
     BeaconPrintf(CALLBACK_OUTPUT, "[*] Port scan completed.\n\n");
     PrintScanSummary(settings, result);
-    
     BeaconPrintf(CALLBACK_OUTPUT, "[+] BOF execution completed.\n");
+    BeaconWakeup();
     return;
 }
