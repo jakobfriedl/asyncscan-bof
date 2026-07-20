@@ -1,3 +1,6 @@
+#ifndef COMMON_H
+#define COMMON_H
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -33,29 +36,39 @@ DECLSPEC_IMPORT int     WINAPI WS2_32$getaddrinfo(PCSTR, PCSTR, const ADDRINFOA*
 DECLSPEC_IMPORT void    WINAPI WS2_32$freeaddrinfo(PADDRINFOA);
 DECLSPEC_IMPORT int     WINAPI WS2_32$getsockopt(SOCKET, int, int, char*, int*);
 
+// IPHLPAPI
+typedef ULONG IPAddr;
+
+typedef struct {
+    UCHAR  Ttl;
+    UCHAR  Tos;
+    UCHAR  Flags;
+    UCHAR  OptionsSize;
+    PUCHAR OptionsData;
+} IP_OPTION_INFORMATION;
+
+typedef struct {
+    IPAddr Address;
+    ULONG  Status;
+    ULONG  RoundTripTime;
+    USHORT DataSize;
+    USHORT Reserved;
+    PVOID  Data;
+    IP_OPTION_INFORMATION Options;
+} ICMP_ECHO_REPLY;
+
+#define ICMP_ECHO_DATA  "abcdefghijklmnopqrstuvwabcdefghi"
+#define ICMP_REPLY_SIZE (sizeof(ICMP_ECHO_REPLY) + sizeof(ICMP_ECHO_DATA))
+
+DECLSPEC_IMPORT HANDLE WINAPI IPHLPAPI$IcmpCreateFile(VOID);
+DECLSPEC_IMPORT DWORD  WINAPI IPHLPAPI$IcmpSendEcho(HANDLE, IPAddr, LPVOID, WORD, IP_OPTION_INFORMATION*, LPVOID, DWORD, DWORD);
+DECLSPEC_IMPORT BOOL   WINAPI IPHLPAPI$IcmpCloseHandle(HANDLE);
+
 typedef struct {
     char **targets;
     int numTargets;
-    int *ports;
-    int numPorts;
     int timeout;
-    int maxConn;
     int verbose;
 } SCAN_SETTINGS;
 
-typedef struct {
-    SOCKET sock;
-    char* target;
-    int port;
-    int targetIndex;
-} SCAN_ENTRY;
-
-typedef struct {
-    int* openPorts;
-    int open;
-    int closed;
-} HOST_RESULT;
-
-typedef struct {
-    HOST_RESULT* hosts;
-} SCAN_RESULT;
+#endif

@@ -3,52 +3,51 @@
 #include <windows.h>
 #include "beacon.h"
 #include "common.h"
+#include "common.c"
 
-SCAN_SETTINGS ParseSettings(char* strTargets, char* strPorts) {
-    SCAN_SETTINGS settings = {0};
+typedef struct {
+    SOCKET sock;
+    char* target;
+    int port;
+    int targetIndex;
+} SCAN_ENTRY;
+
+typedef struct {
+    int* openPorts;
+    int open;
+    int closed;
+} HOST_RESULT;
+
+typedef struct {
+    HOST_RESULT* hosts;
+} SCAN_RESULT;
+
+int* ParsePorts(char* strPorts, int* numPorts) {
     char *p, *token;
     int i, count;
 
-    // Parse targets
-    count = 1;
-    for (p = strTargets; *p; p++) if (*p == ',') count++;
-
-    settings.targets = (char**)MemAlloc(count * sizeof(char*));
-    char* targetsCopy = (char*)MemAlloc(MSVCRT$strlen(strTargets) + 1);
-    MSVCRT$strcpy(targetsCopy, strTargets);
-
-    i = 0;
-    token = MSVCRT$strtok(targetsCopy, ",");
-    while (token && i < count) {
-        int len = MSVCRT$strlen(token) + 1;
-        settings.targets[i] = (char*)MemAlloc(len);
-        MSVCRT$strcpy(settings.targets[i++], token);
-        token = MSVCRT$strtok(NULL, ",");
-    }
-    settings.numTargets = i;
-    MemFree(targetsCopy);
 
     // Parse ports
     count = 1;
     for (p = strPorts; *p; p++) if (*p == ',') count++;
 
-    settings.ports = (int*)MemAlloc(count * sizeof(int));
+    int* ports = (int*)MemAlloc(count * sizeof(int));
     char* portsCopy = (char*)MemAlloc(MSVCRT$strlen(strPorts) + 1);
     MSVCRT$strcpy(portsCopy, strPorts);
 
     i = 0;
     token = MSVCRT$strtok(portsCopy, ",");
     while (token && i < count) {
-        settings.ports[i++] = MSVCRT$atoi(token);
+        ports[i++] = MSVCRT$atoi(token);
         token = MSVCRT$strtok(NULL, ",");
     }
-    settings.numPorts = i;
+    *numPorts = i;
     MemFree(portsCopy);
 
-    return settings;
+    return ports;
 }
 
-SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
+SCAN_RESULT PortScan(SCAN_SETTINGS settings, int* ports, int numPorts, int maxConn, HANDLE hStop) {
     SCAN_RESULT result = {0};
 
     // Initialize Winsock
@@ -59,23 +58,23 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
     }
 
     // Total connections to attempt = targets * ports
-    int total = settings.numTargets * settings.numPorts;
+    int total = settings.numTargets * numPorts;
     int queued = 0;
     int targetIndex = 0, portIndex = 0;
     int active = 0;
 
-    // Allocate per-host result 
-    // Each host gets an open port array with the size of settings.numPorts, as the maximum number of open ports is the number of ports scanned
+    // Allocate per-host result
+    // Each host gets an open port array with the size of numPorts, as the maximum number of open ports is the number of ports scanned
     result.hosts = (HOST_RESULT*)MemAlloc(settings.numTargets * sizeof(HOST_RESULT));
     for (int h = 0; h < settings.numTargets; h++)
-        result.hosts[h].openPorts = (int*)MemAlloc(settings.numPorts * sizeof(int));
+        result.hosts[h].openPorts = (int*)MemAlloc(numPorts * sizeof(int));
 
-    SCAN_ENTRY* entries = (SCAN_ENTRY*)MemAlloc(settings.maxConn * sizeof(SCAN_ENTRY));
-    WSAPOLLFD* fds = (WSAPOLLFD*)MemAlloc(settings.maxConn * sizeof(WSAPOLLFD));
-    int* entryOf = (int*)MemAlloc(settings.maxConn * sizeof(int));
+    SCAN_ENTRY* entries = (SCAN_ENTRY*)MemAlloc(maxConn * sizeof(SCAN_ENTRY));
+    WSAPOLLFD* fds = (WSAPOLLFD*)MemAlloc(maxConn * sizeof(WSAPOLLFD));
+    int* entryOf = (int*)MemAlloc(maxConn * sizeof(int));
 
     // Initialize entries as free
-    for (int i = 0; i < settings.maxConn; i++)
+    for (int i = 0; i < maxConn; i++)
         entries[i].sock = INVALID_SOCKET;
 
     // Notify about the first target before entering the scan loop
@@ -88,16 +87,16 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
             break;
 
         // Populate free entries
-        for (int s = 0; s < settings.maxConn && queued < total && active < settings.maxConn; s++) {
+        for (int s = 0; s < maxConn && queued < total && active < maxConn; s++) {
             if (entries[s].sock != INVALID_SOCKET) continue;
 
             // Capture current target index before it advances
             int curTargetIdx = targetIndex;
             char* target = settings.targets[curTargetIdx];
-            int port = settings.ports[portIndex];
+            int port = ports[portIndex];
 
             portIndex++;
-            if (portIndex >= settings.numPorts) {
+            if (portIndex >= numPorts) {
                 // Move to next target when all ports have been scanned on the current one
                 portIndex = 0;
                 targetIndex++;
@@ -143,7 +142,7 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
         if (active == 0) break;
 
         int nfds = 0;
-        for (int s = 0; s < settings.maxConn; s++) {
+        for (int s = 0; s < maxConn; s++) {
             if (entries[s].sock == INVALID_SOCKET) continue;
             fds[nfds].fd = entries[s].sock;
             fds[nfds].events = POLLWRNORM;
@@ -166,7 +165,7 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
                 WS2_32$getsockopt(entries[s].sock, SOL_SOCKET, SO_ERROR, (char*)&err, &errLen);
 
                 if (err == 0) {
-                    // Port open 
+                    // Port open
                     HOST_RESULT* host = &result.hosts[entries[s].targetIndex];
                     host->openPorts[host->open++] = entries[s].port;
 
@@ -189,7 +188,7 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
     }
 
     // Cleanup open sockets
-    for (int s = 0; s < settings.maxConn; s++)
+    for (int s = 0; s < maxConn; s++)
         if (entries[s].sock != INVALID_SOCKET)
             WS2_32$closesocket(entries[s].sock);
 
@@ -201,19 +200,19 @@ SCAN_RESULT PortScan(SCAN_SETTINGS settings, HANDLE hStop) {
     return result;
 }
 
-VOID PrintScanSummary(SCAN_SETTINGS settings, SCAN_RESULT result){    
+VOID PrintScanSummary(SCAN_SETTINGS settings, SCAN_RESULT result){
     for (int h = 0; h < settings.numTargets; h++) {
         HOST_RESULT* host = &result.hosts[h];
         BeaconPrintf(CALLBACK_OUTPUT, "[*] Scan result for %s: %d open | %d closed\n", settings.targets[h], host->open, host->closed);
-        if (host->open == 0) 
+        if (host->open == 0)
             continue;
-        
+
         for (int p = 0; p < host->open; p++){
             BeaconPrintf(CALLBACK_OUTPUT, "  - %d\n", host->openPorts[p]);
-        }   
-        BeaconPrintf(CALLBACK_OUTPUT, "\n"); 
+        }
+        BeaconPrintf(CALLBACK_OUTPUT, "\n");
     }
-        
+
     for (int h = 0; h < settings.numTargets; h++)
         MemFree(result.hosts[h].openPorts);
     MemFree(result.hosts);
@@ -232,21 +231,23 @@ VOID go(char* args, int argc) {
     char* strPorts = BeaconDataExtract(&parser, &lenPorts);
 
     // Parse settings
-    SCAN_SETTINGS settings = ParseSettings(strTargets, strPorts);
+    SCAN_SETTINGS settings = ParseTargets(strTargets);
+    int numPorts = 0;
+    int* ports = ParsePorts(strPorts, &numPorts);
     settings.timeout = BeaconDataInt(&parser);
-    settings.maxConn = BeaconDataInt(&parser);
+    int maxConn = BeaconDataInt(&parser);
     settings.verbose = BeaconDataInt(&parser);
 
     BeaconPrintf(CALLBACK_OUTPUT, "[*] Port scan started:\n");
     BeaconPrintf(CALLBACK_OUTPUT, "  - Targets to scan: %d\n", settings.numTargets);
-    BeaconPrintf(CALLBACK_OUTPUT, "  - Ports to scan:   %d\n", settings.numPorts);
-    BeaconPrintf(CALLBACK_OUTPUT, "  - Max connections: %d\n", settings.maxConn);
+    BeaconPrintf(CALLBACK_OUTPUT, "  - Ports to scan:   %d\n", numPorts);
+    BeaconPrintf(CALLBACK_OUTPUT, "  - Max connections: %d\n", maxConn);
     BeaconPrintf(CALLBACK_OUTPUT, "  - Timeout:         %dms\n", settings.timeout);
     BeaconPrintf(CALLBACK_OUTPUT, "  - Verbose:         %s\n\n", settings.verbose == 1 ? "true": "false");
-    BeaconWakeup(); 
+    BeaconWakeup();
 
     // Start scan
-    SCAN_RESULT result = PortScan(settings, hStop);
+    SCAN_RESULT result = PortScan(settings, ports, numPorts, maxConn, hStop);
 
     // Print scan results
     BeaconPrintf(CALLBACK_OUTPUT, "[*] Port scan completed.\n\n");

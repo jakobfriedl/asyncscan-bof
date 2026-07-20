@@ -98,7 +98,7 @@ def parsePorts(ports: str) -> str:
 
     return ",".join(str(p) for p in deduped)
 
-cmd_asyncScan = (
+cmd_portscan = (
     conquest.createCommand(name="asyncscan", description="Scan target systems for open ports (async).", example="asyncscan 192.168.168.0/24 1-1000,8443 --verbose",
                            message="Tasked agent to scan target systems for open ports.", mitre=["T1046"])
             .addArgString("targets", "Comma-separated list of targets to scan. Use `-` or CIDR notation to specify IP ranges (e.g. 192.168.1.0-128,192.168.1.200,10.0.1.0/24).", True)
@@ -113,12 +113,35 @@ cmd_asyncScan = (
                 max_conn := conquest.get_int(args, 3),
                 verbose := int(conquest.get_bool(args, 4)),
 
-                bof := os.path.join(SCRIPT_DIR, "asyncscan.x64.o"),
+                bof := os.path.join(SCRIPT_DIR, "portscan.x64.o"),
                 params := conquest.bof_pack("zziii", [
                     parseTargets(targets),      # z: Comma-separated list of targets
                     parsePorts(ports),          # z: Comma-separated list of ports
                     timeout,                    # i: Timeout between checks in ms
                     max_conn,                   # i: Maximum number of connections that the portscanner handles at one time 
+                    verbose                     # i: Verbose mode
+                ]),
+
+                conquest.execute_alias(agentId, cmdline, f"dll {ASYNC_DLL} {EXPORT_FUNC} {conquest.async_bof_pack(bof, params)}") if os.path.exists(bof)
+                else conquest.error(agentId, f"Failed to open object file: {bof}", cmdline)
+            ))
+).registerToGroup("situational awareness")
+
+cmd_pingsweep = (
+    conquest.createCommand(name="asyncsweep", description="Scan for live hosts (async).", example="asyncsweep 192.168.168.0/24 --verbose",
+                           message="Tasked agent to scan for live hosts.", mitre=["T1018"])
+            .addArgString("targets", "Comma-separated list of targets to scan. Use `-` or CIDR notation to specify IP ranges (e.g. 192.168.1.0-128,192.168.1.200,10.0.1.0/24).", True)
+            .addFlagInt("--timeout", "timeout", "Maximum time to wait per poll cycle for connections to respond in ms (default: 500).", False, 500)
+            .addFlagBool("--verbose", "Report live hosts as they are discovered (default: false).")
+            .setHandler(lambda agentId, cmdline, args: (
+                targets := conquest.get_string(args, 0),
+                timeout := conquest.get_int(args, 1),
+                verbose := int(conquest.get_bool(args, 2)),
+
+                bof := os.path.join(SCRIPT_DIR, "pingsweep.x64.o"),
+                params := conquest.bof_pack("zii", [
+                    parseTargets(targets),      # z: Comma-separated list of targets
+                    timeout,                    # i: Timeout between checks in ms
                     verbose                     # i: Verbose mode
                 ]),
 
