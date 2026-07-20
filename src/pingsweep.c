@@ -59,11 +59,12 @@ SWEEP_RESULT PingSweep(SCAN_SETTINGS settings, HANDLE hStop) {
         );
 
         if (ret != 0) {
-            result.alive[i] = 1;
+            ICMP_ECHO_REPLY* reply = (ICMP_ECHO_REPLY*)replyBuf;
+            result.alive[i] = reply->Options.Ttl;
             result.numAlive++;
 
             if (settings.verbose) {
-                BeaconPrintf(CALLBACK_OUTPUT, "[+] %s\n is alive", settings.targets[i]);
+                BeaconPrintf(CALLBACK_OUTPUT, "[+] %s [ttl=%d]\n", settings.targets[i], reply->Options.Ttl);
                 BeaconWakeup();
             }
         }
@@ -79,7 +80,7 @@ VOID PrintSweepSummary(SCAN_SETTINGS settings, SWEEP_RESULT result) {
     BeaconPrintf(CALLBACK_OUTPUT, "[*] %d/%d hosts alive\n", result.numAlive, settings.numTargets);
     for (int h = 0; h < settings.numTargets; h++) {
         if (result.alive[h])
-            BeaconPrintf(CALLBACK_OUTPUT, "  - %s\n", settings.targets[h]);
+            BeaconPrintf(CALLBACK_OUTPUT, "  - %s [ttl=%d]\n", settings.targets[h], result.alive[h]);
     }
     MemFree(result.alive);
 }
